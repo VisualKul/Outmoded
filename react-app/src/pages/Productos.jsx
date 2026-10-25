@@ -148,7 +148,7 @@ function Productos({ productos, agregarAlCarrito }) {
 
           {productosFiltrados.length === 0 ? (
             <p className="empty-products">
-              NO SE ENCONTRARON PRODUCTOS EN EL ARCHIVO.
+              NO SE ENCONTRARON PRODUCTOS PASADOS DE MODA.
             </p>
           ) : (
             <div className="products-grid row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-3">

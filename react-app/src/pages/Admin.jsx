@@ -256,13 +256,13 @@ function Admin({ productos, setProductos }) {
                   <div className="text-secondary small">{p.categoriaLabel}</div>
                 </td>
                 <td>
-                  <div>
-                    <span className={tieneOferta(p) ? "text-decoration-line-through text-secondary small d-block" : "fw-bold"}>
+                  <div className="py-1">
+                    <span className={tieneOferta(p) ? "text-decoration-line-through text-secondary small d-block mb-1" : "fw-bold d-block mb-2"}>
                       {money(p.precio)}
                     </span>
 
                     {tieneOferta(p) && (
-                      <div className="d-flex align-items-center gap-1 mt-1">
+                      <div className="d-flex align-items-center gap-1 mb-2">
                         <span className="badge text-bg-danger fw-normal" style={{ fontSize: "0.75rem" }}>
                           {money(p.precioOferta)} (-{calcularDescuento(p)}%)
                         </span>
@@ -279,11 +279,11 @@ function Admin({ productos, setProductos }) {
                     )}
 
                     {editandoOfertaId === p.id ? (
-                      <form className="d-flex align-items-center gap-1 mt-1" onSubmit={(e) => guardarOferta(e, p.id)}>
+                      <form className="d-flex align-items-center gap-1 mt-2" onSubmit={(e) => guardarOferta(e, p.id)}>
                         <input
                           type="number"
-                          className="form-control form-control-sm py-0 px-1"
-                          style={{ width: "85px", height: "26px" }}
+                          className="form-control form-control-sm py-0 px-2"
+                          style={{ width: "90px", height: "28px" }}
                           placeholder="Oferta $"
                           min="1"
                           max={p.precio - 1}
@@ -291,11 +291,11 @@ function Admin({ productos, setProductos }) {
                           value={nuevoPrecioOferta}
                           onChange={(e) => setNuevoPrecioOferta(e.target.value)}
                         />
-                        <button type="submit" className="btn btn-sm btn-dark py-0 px-2" style={{ height: "26px" }} title="Aplicar oferta">✓</button>
+                        <button type="submit" className="btn btn-sm btn-dark py-0 px-2" style={{ height: "28px" }} title="Aplicar oferta">✓</button>
                         <button
                           type="button"
                           className="btn btn-sm btn-outline-secondary py-0 px-1"
-                          style={{ height: "26px" }}
+                          style={{ height: "28px" }}
                           onClick={() => { setEditandoOfertaId(null); setNuevoPrecioOferta(""); }}
                         >
                           ✕
@@ -304,8 +304,8 @@ function Admin({ productos, setProductos }) {
                     ) : (
                       <button
                         type="button"
-                        className="btn btn-sm btn-outline-primary py-0 px-1 mt-1"
-                        style={{ fontSize: "0.72rem", height: "24px" }}
+                        className="btn btn-sm btn-outline-primary py-1 px-2 d-inline-block"
+                        style={{ fontSize: "0.75rem" }}
                         onClick={() => iniciarEdicionOferta(p)}
                       >
                         {tieneOferta(p) ? "✎ Modificar oferta" : "＋ Aplicar oferta"}
@@ -325,7 +325,10 @@ function Admin({ productos, setProductos }) {
                       >
                         −
                       </button>
-                      <span className={`badge ${p.stock <= 3 ? "text-bg-danger" : "text-bg-success"} d-flex align-items-center px-2`} style={{ minWidth: "50px", justifyContent: "center" }}>
+                      <span
+                        className={`badge ${p.stock <= 3 ? "text-bg-danger" : "text-bg-success"} rounded-0 d-flex align-items-center justify-content-center px-3 border-0`}
+                        style={{ minWidth: "56px", fontSize: "0.82rem", fontWeight: "600" }}
+                      >
                         {p.stock} un.
                       </span>
                       <button
