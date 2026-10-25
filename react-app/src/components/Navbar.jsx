@@ -6,8 +6,13 @@ import "../styles/navbar.css";
 const SESSION_KEY = "OutmodedSession";
 
 function Navbar({ cantidadCarrito }) {
-  useLocation();
+  const location = useLocation();
   const [menuAbierto, setMenuAbierto] = useState(false);
+
+  // Oculta el navbar en todas las rutas administrativas
+  if (location.pathname.startsWith("/admin")) {
+    return null;
+  }
 
   const tieneSesionActiva = () => {
     const localSession =
