@@ -1,11 +1,30 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { crearProducto, actualizarProducto, eliminarProducto, leerOrdenes, guardarOrdenes, ORDERS_KEY } from "../data/tienda";
+import {
+  crearProducto,
+  actualizarProducto,
+  eliminarProducto,
+  leerOrdenes,
+  guardarOrdenes,
+  ORDERS_KEY,
+  descargarProductosJSON,
+  restablecerProductos
+} from "../data/tienda";
 import { tieneOferta, calcularDescuento } from "../utils/precios";
 import "../styles/admin.css";
 
 const money = (n) => `$${Number(n || 0).toLocaleString("es-CL")}`;
-const initialForm = { codigo: "", nombre: "", categoria: "tops", categoriaLabel: "Tops", precio: "", precioOferta: "", stock: "", imagen: "/img/camisetaBabyTeeNegraStatic.png", descripcion: "" };
+const initialForm = {
+  codigo: "",
+  nombre: "",
+  categoria: "tops",
+  categoriaLabel: "Tops",
+  precio: "",
+  precioOferta: "",
+  stock: "",
+  imagen: "",
+  descripcion: ""
+};
 
 function crearPedidosDemo(productos) {
   const porId = (id) => productos.find((p) => p.id === id) || productos[0];
@@ -79,8 +98,34 @@ function Admin({ productos, setProductos }) {
   const pedidosPendientes = ordenes.filter((o) => o.estado === "PAGADA" || o.estado === "PENDIENTE").length;
   const maxVentas = Math.max(1, ...ventas.map((v) => v[1]));
 
+  const manejarSubidaImagen = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setMensaje("El archivo seleccionado debe ser una imagen (PNG, JPG, WebP).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setForm((prev) => ({ ...prev, imagen: event.target.result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const guardar = (e) => {
     e.preventDefault();
+    const codigoLimpio = form.codigo.trim().toUpperCase();
+    if (!codigoLimpio) {
+      setMensaje("Debes ingresar un código de producto.");
+      return;
+    }
+    const productoDuplicado = productos.find(
+      (p) => String(p.codigo || "").trim().toUpperCase() === codigoLimpio
+    );
+    if (productoDuplicado) {
+      setMensaje(`El código "${codigoLimpio}" ya está registrado en "${productoDuplicado.nombre}". Debe ser un identificador único que no se repita.`);
+      return;
+    }
     if (!form.nombre.trim() || Number(form.precio) <= 0 || Number(form.stock) < 0) {
       setMensaje("Completa el nombre, un precio mayor a cero y un stock válido.");
       return;
@@ -92,8 +137,11 @@ function Admin({ productos, setProductos }) {
         return;
       }
     }
+    const imagenFinal = form.imagen.trim() || "/img/camisetaBabyTeeNegraStatic.png";
     const nuevo = {
       ...form,
+      codigo: codigoLimpio,
+      imagen: imagenFinal,
       id: Date.now(),
       precio: Number(form.precio),
       stock: Number(form.stock),
@@ -102,7 +150,7 @@ function Admin({ productos, setProductos }) {
     setProductos((actuales) => crearProducto(actuales, nuevo));
     setForm(initialForm);
     setMostrarForm(false);
-    setMensaje("Producto agregado correctamente.");
+    setMensaje(`Producto "${nuevo.nombre}" (${codigoLimpio}) agregado correctamente.`);
   };
 
   const ajustarStockDelta = (id, delta) => {
@@ -199,15 +247,25 @@ function Admin({ productos, setProductos }) {
       <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
         <div>
           <h2 className="mb-1">Inventario y Stock</h2>
-          <p className="text-secondary small mb-0">Gestiona catálogo y ajusta el stock de cada producto directamente desde la tabla.</p>
+          <p className="text-secondary small mb-0">Gestiona catálogo, imágenes, precios de oferta y stock en tiempo real.</p>
         </div>
-        <button
-          type="button"
-          className={`btn ${mostrarForm ? "btn-outline-dark" : "btn-dark"} d-inline-flex align-items-center gap-1`}
-          onClick={() => setMostrarForm(!mostrarForm)}
-        >
-          {mostrarForm ? "✕ Cerrar formulario" : "＋ Agregar nuevo producto"}
-        </button>
+        <div className="d-flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn btn-outline-secondary d-inline-flex align-items-center gap-1"
+            onClick={() => descargarProductosJSON(productos)}
+            title="Descargar archivo productos.json con el catálogo actual"
+          >
+            📥 Exportar productos.json
+          </button>
+          <button
+            type="button"
+            className={`btn ${mostrarForm ? "btn-outline-dark" : "btn-dark"} d-inline-flex align-items-center gap-1`}
+            onClick={() => setMostrarForm(!mostrarForm)}
+          >
+            {mostrarForm ? "✕ Cerrar formulario" : "＋ Agregar nuevo producto"}
+          </button>
+        </div>
       </div>
 
       <div className="row g-2 mb-3">
@@ -222,14 +280,61 @@ function Admin({ productos, setProductos }) {
             <h3 className="h5 mb-0">Nuevo Producto</h3>
             <span className="badge text-bg-secondary">Formulario de registro</span>
           </div>
-          <div className="col-12 col-md-3"><label className="form-label">Código</label><input className="form-control" value={form.codigo} onChange={e => setForm({...form,codigo:e.target.value})} required/></div>
-          <div className="col-12 col-md-5"><label className="form-label">Nombre</label><input className="form-control" value={form.nombre} onChange={e => setForm({...form,nombre:e.target.value})} required/></div>
-          <div className="col-6 col-md-2"><label className="form-label">Precio CLP</label><input className="form-control" type="number" min="1" value={form.precio} onChange={e => setForm({...form,precio:e.target.value})} required/></div>
-          <div className="col-6 col-md-2"><label className="form-label">Precio Oferta (opcional)</label><input className="form-control" type="number" min="1" placeholder="Ej: 14990" value={form.precioOferta || ""} onChange={e => setForm({...form,precioOferta:e.target.value})}/></div>
-          <div className="col-6 col-md-2"><label className="form-label">Stock inicial</label><input className="form-control" type="number" min="0" value={form.stock} onChange={e => setForm({...form,stock:e.target.value})} required/></div>
-          <div className="col-6 col-md-3"><label className="form-label">Categoría</label><select className="form-select" value={form.categoria} onChange={e => {const categoria=e.target.value; setForm({...form,categoria,categoriaLabel:categoria[0].toUpperCase()+categoria.slice(1)});}}><option value="tops">Tops</option><option value="bottoms">Bottoms</option><option value="accesorios">Accesorios</option><option value="outerwear">Outerwear</option><option value="ofertas">Ofertas</option></select></div>
-          <div className="col-12 col-md-7"><label className="form-label">Descripción</label><input className="form-control" value={form.descripcion} onChange={e => setForm({...form,descripcion:e.target.value})}/></div>
-          <div className="col-12 d-flex gap-2 mt-2">
+          <div className="col-12 col-md-3"><label className="form-label">Código</label><input className="form-control" placeholder="ITEM_999" value={form.codigo} onChange={e => setForm({...form,codigo:e.target.value})} required/></div>
+          <div className="col-12 col-md-5"><label className="form-label">Nombre</label><input className="form-control" placeholder="Nombre de la prenda" value={form.nombre} onChange={e => setForm({...form,nombre:e.target.value})} required/></div>
+          <div className="col-6 col-md-2"><label className="form-label">Precio CLP</label><input className="form-control" type="number" min="1" placeholder="Ej: 24990" value={form.precio} onChange={e => setForm({...form,precio:e.target.value})} required/></div>
+          <div className="col-6 col-md-2"><label className="form-label">Precio Oferta (opcional)</label><input className="form-control" type="number" min="1" placeholder="Ej: 19990" value={form.precioOferta || ""} onChange={e => setForm({...form,precioOferta:e.target.value})}/></div>
+          <div className="col-6 col-md-3"><label className="form-label">Stock inicial</label><input className="form-control" type="number" min="0" placeholder="Ej: 10" value={form.stock} onChange={e => setForm({...form,stock:e.target.value})} required/></div>
+          <div className="col-6 col-md-3"><label className="form-label">Categoría</label><select className="form-select" value={form.categoria} onChange={e => {const categoria=e.target.value; setForm({...form,categoria,categoriaLabel:categoria[0].toUpperCase()+categoria.slice(1)});}}><option value="tops">Tops</option><option value="bottoms">Bottoms</option><option value="accesorios">Accesorios</option><option value="outerwear">Outerwear</option></select></div>
+          <div className="col-12 col-md-6"><label className="form-label">Descripción</label><input className="form-control" placeholder="Descripción breve" value={form.descripcion} onChange={e => setForm({...form,descripcion:e.target.value})}/></div>
+          
+          {/* Subida o selección de imagen del producto */}
+          <div className="col-12 col-md-6">
+            <label className="form-label">Subir imagen desde el equipo</label>
+            <input
+              type="file"
+              accept="image/*"
+              className="form-control"
+              onChange={manejarSubidaImagen}
+            />
+            <small className="text-secondary d-block mt-1">Sube cualquier foto desde tu computador (PNG, JPG, WebP).</small>
+          </div>
+          <div className="col-12 col-md-6">
+            <label className="form-label">O ingresar URL / ruta de imagen</label>
+            <input
+              className="form-control"
+              placeholder="/img/mi-foto.png o https://..."
+              value={form.imagen}
+              onChange={(e) => setForm({ ...form, imagen: e.target.value })}
+            />
+            <small className="text-secondary d-block mt-1">Si no seleccionas ninguna, se usará una imagen base por defecto.</small>
+          </div>
+
+          {form.imagen && (
+            <div className="col-12">
+              <div className="d-flex align-items-center gap-3 p-2 border rounded bg-white mt-1">
+                <img
+                  src={form.imagen}
+                  alt="Vista previa del nuevo producto"
+                  style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px", border: "1px solid #ccc" }}
+                />
+                <div>
+                  <span className="badge text-bg-success mb-1">✓ Imagen cargada correctamente</span>
+                  <div>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-link text-danger p-0 text-decoration-none"
+                      onClick={() => setForm({ ...form, imagen: "" })}
+                    >
+                      ✕ Quitar imagen
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="col-12 d-flex gap-2 mt-3">
             <button className="btn btn-dark" type="submit">Guardar producto</button>
             <button className="btn btn-outline-secondary" type="button" onClick={() => setMostrarForm(false)}>Cancelar</button>
           </div>
@@ -252,8 +357,17 @@ function Admin({ productos, setProductos }) {
               <tr key={p.id}>
                 <td><code>{p.codigo}</code></td>
                 <td>
-                  <strong>{p.nombre}</strong>
-                  <div className="text-secondary small">{p.categoriaLabel}</div>
+                  <div className="d-flex align-items-center gap-2">
+                    <img
+                      src={p.imagen}
+                      alt={p.nombre}
+                      style={{ width: "42px", height: "42px", objectFit: "cover", borderRadius: "6px", border: "1px solid #ddd" }}
+                    />
+                    <div>
+                      <strong>{p.nombre}</strong>
+                      <div className="text-secondary small">{p.categoriaLabel}</div>
+                    </div>
+                  </div>
                 </td>
                 <td>
                   <div className="py-1">
@@ -396,7 +510,38 @@ function Admin({ productos, setProductos }) {
 
     {seccion === "/pedidos" && <section className="admin-panel"><h2>Confirmación y preparación de pedidos</h2>{ordenes.length ? <div className="table-responsive"><table className="table align-middle"><thead><tr><th>Pedido</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{ordenes.map(o => <tr key={o.id}><td>{o.id}{o.demo && <><br/><span className="badge text-bg-warning">DEMO</span></>}</td><td>{o.cliente?.nombre}<br/><small>{o.cliente?.correo}</small></td><td>{new Date(o.fecha).toLocaleDateString("es-CL")}</td><td>{money(o.total)}</td><td><span className="badge text-bg-secondary">{o.estado}</span></td><td><div className="d-flex flex-wrap gap-1"><button className="btn btn-sm btn-outline-primary" onClick={() => cambiarEstado(o.id,"CONFIRMADO")}>Aceptar</button><button className="btn btn-sm btn-outline-success" onClick={() => cambiarEstado(o.id,"PREPARADO")}>Preparado</button><button className="btn btn-sm btn-outline-danger" onClick={() => cambiarEstado(o.id,"CANCELADO")}>Cancelar</button></div></td></tr>)}</tbody></table></div> : <p className="text-secondary">No hay pedidos registrados todavía. Realiza una compra de prueba para verla aquí.</p>}</section>}
 
-    {seccion === "/cuenta" && <section className="admin-panel"><h2>Cuenta y ajustes</h2><p>Esta versión corresponde a una demostración frontend Outmoded. Los cambios se guardan en el almacenamiento local de este navegador.</p><p><strong>Productos:</strong> {productos.length} registrados</p><p><strong>Pedidos:</strong> {ordenes.length} registrados</p><button className="btn btn-outline-danger" onClick={() => { if (window.confirm("¿Borrar el historial local de pedidos?")) {setOrdenes([]); guardarOrdenes([]); setMensaje("Historial local eliminado.");} }}>Limpiar historial de pedidos</button></section>}
+    {seccion === "/cuenta" && <section className="admin-panel">
+      <h2>Cuenta y ajustes</h2>
+      <p>Esta versión corresponde a una demostración frontend Outmoded. Los cambios se guardan en el almacenamiento local de este navegador.</p>
+      <p><strong>Productos:</strong> {productos.length} registrados</p>
+      <p><strong>Pedidos:</strong> {ordenes.length} registrados</p>
+      <div className="d-flex flex-wrap gap-2 mt-3">
+        <button
+          className="btn btn-outline-warning"
+          onClick={() => {
+            if (window.confirm("¿Restablecer el catálogo al archivo productos.json original? Se limpiarán productos obsoletos y cambios locales.")) {
+              const base = restablecerProductos();
+              setProductos(base);
+              setMensaje("Catálogo restablecido exitosamente desde productos.json.");
+            }
+          }}
+        >
+          🔄 Restablecer catálogo a productos.json
+        </button>
+        <button
+          className="btn btn-outline-danger"
+          onClick={() => {
+            if (window.confirm("¿Borrar el historial local de pedidos?")) {
+              setOrdenes([]);
+              guardarOrdenes([]);
+              setMensaje("Historial local eliminado.");
+            }
+          }}
+        >
+          Limpiar historial de pedidos
+        </button>
+      </div>
+    </section>}
   </main>;
 }
 export default Admin;

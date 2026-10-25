@@ -11,6 +11,12 @@ describe("Persistencia local de la tienda", () => {
     expect(resultado[1].nombre).toBe("Nuevo");
   });
 
+  it("no permite agregar un producto con un código repetido", () => {
+    const catalogo = [{ id: 1, codigo: "ITEM_001", nombre: "Top" }];
+    const duplicado = crearProducto(catalogo, { id: 2, codigo: "item_001", nombre: "Otro Top" });
+    expect(duplicado.length).toBe(1);
+  });
+
   it("actualiza atributos de un producto sin modificar los demás", () => {
     const resultado = actualizarProducto(base, 1, { stock: 9 });
     expect(resultado[0].stock).toBe(9);
