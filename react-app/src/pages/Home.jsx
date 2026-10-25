@@ -31,18 +31,6 @@ function Home() {
             Tendencias del pasado.
           </p>
 
-          <Link
-            to="/colecciones"
-            className="hero-button"
-          >
-            <span>
-              VER COLECCIÓN
-            </span>
-
-            <span>
-              →
-            </span>
-          </Link>
 
         </div>
       </section>

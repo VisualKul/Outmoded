@@ -1,5 +1,5 @@
 function AccountFooter({
-  version = "VER_2.003 | Grupo 7",
+  version = "VER_2.003 | Alone",
   className = "account-footer"
 }) {
   return (
