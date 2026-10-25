@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   crearProducto,
@@ -8,7 +8,8 @@ import {
   guardarOrdenes,
   ORDERS_KEY,
   descargarProductosJSON,
-  restablecerProductos
+  restablecerProductos,
+  existeCodigoProducto
 } from "../data/tienda";
 import { tieneOferta, calcularDescuento } from "../utils/precios";
 import "../styles/admin.css";
@@ -82,6 +83,8 @@ function Admin({ productos, setProductos }) {
   const [loteStock, setLoteStock] = useState("");
   const [editandoOfertaId, setEditandoOfertaId] = useState(null);
   const [nuevoPrecioOferta, setNuevoPrecioOferta] = useState("");
+  const [editandoProductoId, setEditandoProductoId] = useState(null);
+  const [formEdicion, setFormEdicion] = useState(null);
 
   const rawSeccion = location.pathname.replace("/admin", "") || "/";
   // Si navegan a /stock se atiende directamente en inventario
@@ -151,6 +154,88 @@ function Admin({ productos, setProductos }) {
     setForm(initialForm);
     setMostrarForm(false);
     setMensaje(`Producto "${nuevo.nombre}" (${codigoLimpio}) agregado correctamente.`);
+  };
+
+  const toggleEditarProducto = (producto) => {
+    if (editandoProductoId === producto.id) {
+      setEditandoProductoId(null);
+      setFormEdicion(null);
+    } else {
+      setEditandoProductoId(producto.id);
+      setFormEdicion({
+        codigo: producto.codigo || "",
+        nombre: producto.nombre || "",
+        categoria: producto.categoria || "tops",
+        categoriaLabel: producto.categoriaLabel || "Tops",
+        precio: String(producto.precio || ""),
+        precioOferta: producto.precioOferta ? String(producto.precioOferta) : "",
+        stock: String(producto.stock ?? ""),
+        imagen: producto.imagen || "",
+        descripcion: producto.descripcion || ""
+      });
+    }
+  };
+
+  const manejarImagenEdicion = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setMensaje("El archivo seleccionado debe ser una imagen (PNG, JPG, WebP).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setFormEdicion((prev) => ({ ...prev, imagen: event.target.result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const guardarEdicion = (e, id) => {
+    e.preventDefault();
+    if (!formEdicion) return;
+
+    const codigoLimpio = formEdicion.codigo.trim().toUpperCase();
+    if (!codigoLimpio) {
+      setMensaje("Debes ingresar un código de producto.");
+      return;
+    }
+
+    if (existeCodigoProducto(productos, codigoLimpio, id)) {
+      setMensaje(`El código "${codigoLimpio}" ya está registrado en otro producto. Debe ser un identificador único.`);
+      return;
+    }
+
+    if (!formEdicion.nombre.trim() || Number(formEdicion.precio) <= 0 || Number(formEdicion.stock) < 0) {
+      setMensaje("Completa el nombre, un precio mayor a cero y un stock válido.");
+      return;
+    }
+
+    let precioOfertaNum = null;
+    if (formEdicion.precioOferta) {
+      const pOferta = Number(formEdicion.precioOferta);
+      if (pOferta <= 0 || pOferta >= Number(formEdicion.precio)) {
+        setMensaje("El precio de oferta debe ser mayor a cero y menor que el precio normal.");
+        return;
+      }
+      precioOfertaNum = pOferta;
+    }
+
+    const cambios = {
+      codigo: codigoLimpio,
+      nombre: formEdicion.nombre.trim(),
+      categoria: formEdicion.categoria,
+      categoriaLabel: formEdicion.categoriaLabel,
+      precio: Number(formEdicion.precio),
+      precioOferta: precioOfertaNum,
+      stock: Number(formEdicion.stock),
+      imagen: formEdicion.imagen.trim() || "/img/camisetaBabyTeeNegraStatic.png",
+      descripcion: formEdicion.descripcion.trim()
+    };
+
+    setProductos((actuales) => actualizarProducto(actuales, id, cambios));
+    setEditandoProductoId(null);
+    setFormEdicion(null);
+    setMensaje(`Producto "${cambios.nombre}" (${codigoLimpio}) actualizado exitosamente.`);
   };
 
   const ajustarStockDelta = (id, delta) => {
@@ -354,7 +439,8 @@ function Admin({ productos, setProductos }) {
           </thead>
           <tbody>
             {productosFiltrados.map(p => (
-              <tr key={p.id}>
+              <Fragment key={p.id}>
+                <tr>
                 <td><code>{p.codigo}</code></td>
                 <td>
                   <div className="d-flex align-items-center gap-2">
@@ -491,18 +577,105 @@ function Admin({ productos, setProductos }) {
                   </div>
                 </td>
                 <td>
-                  <button
-                    className="btn btn-sm btn-outline-danger"
-                    onClick={() => {
-                      setProductos(actuales => eliminarProducto(actuales, p.id));
-                      setMensaje("Producto eliminado del catálogo.");
-                    }}
-                  >
-                    Eliminar
-                  </button>
+                  <div className="d-flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${editandoProductoId === p.id ? "btn-dark" : "btn-outline-dark"}`}
+                      onClick={() => toggleEditarProducto(p)}
+                    >
+                      {editandoProductoId === p.id ? "✕ Cerrar" : "✎ Editar"}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-outline-danger"
+                      onClick={() => {
+                        if (window.confirm(`¿Eliminar "${p.nombre}" del catálogo?`)) {
+                          setProductos(actuales => eliminarProducto(actuales, p.id));
+                          if (editandoProductoId === p.id) { setEditandoProductoId(null); setFormEdicion(null); }
+                          setMensaje("Producto eliminado del catálogo.");
+                        }
+                      }}
+                    >
+                      Eliminar
+                    </button>
+                  </div>
                 </td>
               </tr>
-            ))}
+
+              {/* Fila expandible de edición */}
+              {editandoProductoId === p.id && formEdicion && (
+                <tr>
+                  <td colSpan="5" className="p-0 border-0">
+                    <form
+                      className="row g-2 border rounded m-2 p-3 bg-light"
+                      onSubmit={(e) => guardarEdicion(e, p.id)}
+                    >
+                      <div className="col-12 d-flex justify-content-between align-items-center">
+                        <h3 className="h6 mb-0">Editando: <strong>{p.nombre}</strong></h3>
+                        <span className="badge text-bg-dark">ID: {p.id}</span>
+                      </div>
+
+                      <div className="col-12 col-md-3">
+                        <label className="form-label">Código</label>
+                        <input className="form-control form-control-sm" value={formEdicion.codigo} onChange={(e) => setFormEdicion({...formEdicion, codigo: e.target.value})} required/>
+                      </div>
+                      <div className="col-12 col-md-5">
+                        <label className="form-label">Nombre</label>
+                        <input className="form-control form-control-sm" value={formEdicion.nombre} onChange={(e) => setFormEdicion({...formEdicion, nombre: e.target.value})} required/>
+                      </div>
+                      <div className="col-6 col-md-2">
+                        <label className="form-label">Precio CLP</label>
+                        <input className="form-control form-control-sm" type="number" min="1" value={formEdicion.precio} onChange={(e) => setFormEdicion({...formEdicion, precio: e.target.value})} required/>
+                      </div>
+                      <div className="col-6 col-md-2">
+                        <label className="form-label">Precio Oferta</label>
+                        <input className="form-control form-control-sm" type="number" min="1" placeholder="Opcional" value={formEdicion.precioOferta || ""} onChange={(e) => setFormEdicion({...formEdicion, precioOferta: e.target.value})}/>
+                      </div>
+                      <div className="col-6 col-md-2">
+                        <label className="form-label">Stock</label>
+                        <input className="form-control form-control-sm" type="number" min="0" value={formEdicion.stock} onChange={(e) => setFormEdicion({...formEdicion, stock: e.target.value})} required/>
+                      </div>
+                      <div className="col-6 col-md-3">
+                        <label className="form-label">Categoría</label>
+                        <select className="form-select form-select-sm" value={formEdicion.categoria} onChange={(e) => {const cat = e.target.value; setFormEdicion({...formEdicion, categoria: cat, categoriaLabel: cat[0].toUpperCase()+cat.slice(1)});}}>
+                          <option value="tops">Tops</option>
+                          <option value="bottoms">Bottoms</option>
+                          <option value="accesorios">Accesorios</option>
+                          <option value="outerwear">Outerwear</option>
+                        </select>
+                      </div>
+                      <div className="col-12 col-md-7">
+                        <label className="form-label">Descripción</label>
+                        <input className="form-control form-control-sm" value={formEdicion.descripcion} onChange={(e) => setFormEdicion({...formEdicion, descripcion: e.target.value})}/>
+                      </div>
+
+                      <div className="col-12 col-md-6">
+                        <label className="form-label">Cambiar imagen (archivo)</label>
+                        <input type="file" accept="image/*" className="form-control form-control-sm" onChange={manejarImagenEdicion}/>
+                      </div>
+                      <div className="col-12 col-md-6">
+                        <label className="form-label">O URL de imagen</label>
+                        <input className="form-control form-control-sm" placeholder="/img/foto.png" value={formEdicion.imagen} onChange={(e) => setFormEdicion({...formEdicion, imagen: e.target.value})}/>
+                      </div>
+
+                      {formEdicion.imagen && (
+                        <div className="col-12">
+                          <div className="d-flex align-items-center gap-2 mt-1">
+                            <img src={formEdicion.imagen} alt="Vista previa" style={{ width: "48px", height: "48px", objectFit: "cover", borderRadius: "6px", border: "1px solid #ccc" }}/>
+                            <small className="text-secondary">Vista previa de la imagen actual</small>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="col-12 d-flex gap-2 mt-2">
+                        <button className="btn btn-dark btn-sm" type="submit">💾 Guardar cambios</button>
+                        <button className="btn btn-outline-secondary btn-sm" type="button" onClick={() => { setEditandoProductoId(null); setFormEdicion(null); }}>Cancelar</button>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
           </tbody>
         </table>
       </div>
