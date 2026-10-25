@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import ProductCard from "../components/ProductCard";
+import { tieneOferta } from "../utils/precios";
 import "../styles/productos.css";
 
 function Productos({ productos, agregarAlCarrito }) {
@@ -36,7 +37,9 @@ function Productos({ productos, agregarAlCarrito }) {
   const productosFiltrados = productos.filter((producto) => {
     const coincideCategoria =
       categoriaActual === "todos" ||
-      producto.categoria === categoriaActual;
+      (categoriaActual === "ofertas"
+        ? (producto.categoria === "ofertas" || tieneOferta(producto))
+        : producto.categoria === categoriaActual);
 
     const textoProducto = normalizarTexto(
       `${producto.nombre} ${producto.categoriaLabel} ${producto.descripcion}`

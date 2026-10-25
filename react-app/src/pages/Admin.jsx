@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { crearProducto, actualizarProducto, eliminarProducto, leerOrdenes, guardarOrdenes, ORDERS_KEY } from "../data/tienda";
+import { tieneOferta, calcularDescuento } from "../utils/precios";
 import "../styles/admin.css";
 
 const money = (n) => `$${Number(n || 0).toLocaleString("es-CL")}`;
-const initialForm = { codigo: "", nombre: "", categoria: "tops", categoriaLabel: "Tops", precio: "", stock: "", imagen: "/img/camisetaBabyTeeNegraStatic.png", descripcion: "" };
+const initialForm = { codigo: "", nombre: "", categoria: "tops", categoriaLabel: "Tops", precio: "", precioOferta: "", stock: "", imagen: "/img/camisetaBabyTeeNegraStatic.png", descripcion: "" };
 
 function crearPedidosDemo(productos) {
   const porId = (id) => productos.find((p) => p.id === id) || productos[0];
@@ -56,10 +57,16 @@ function Admin({ productos, setProductos }) {
   const [ordenes, setOrdenes] = useState(() => cargarOrdenesIniciales(productos));
   const [form, setForm] = useState(initialForm);
   const [mensaje, setMensaje] = useState("");
-  const [stockId, setStockId] = useState("");
-  const [cantidadStock, setCantidadStock] = useState("");
   const [busqueda, setBusqueda] = useState("");
-  const seccion = location.pathname.replace("/admin", "") || "/";
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [editandoStockId, setEditandoStockId] = useState(null);
+  const [loteStock, setLoteStock] = useState("");
+  const [editandoOfertaId, setEditandoOfertaId] = useState(null);
+  const [nuevoPrecioOferta, setNuevoPrecioOferta] = useState("");
+
+  const rawSeccion = location.pathname.replace("/admin", "") || "/";
+  // Si navegan a /stock se atiende directamente en inventario
+  const seccion = rawSeccion === "/stock" ? "/inventario" : rawSeccion;
 
   const ventas = useMemo(() => {
     const map = {};
@@ -71,30 +78,86 @@ function Admin({ productos, setProductos }) {
   const ventasTotales = ordenes.reduce((sum, o) => sum + Number(o.total || 0), 0);
   const pedidosPendientes = ordenes.filter((o) => o.estado === "PAGADA" || o.estado === "PENDIENTE").length;
   const maxVentas = Math.max(1, ...ventas.map((v) => v[1]));
+
   const guardar = (e) => {
     e.preventDefault();
     if (!form.nombre.trim() || Number(form.precio) <= 0 || Number(form.stock) < 0) {
       setMensaje("Completa el nombre, un precio mayor a cero y un stock válido.");
       return;
     }
-    const nuevo = { ...form, id: Date.now(), precio: Number(form.precio), stock: Number(form.stock) };
+    if (form.precioOferta) {
+      const pOferta = Number(form.precioOferta);
+      if (pOferta <= 0 || pOferta >= Number(form.precio)) {
+        setMensaje("El precio de oferta debe ser mayor a cero y menor que el precio normal.");
+        return;
+      }
+    }
+    const nuevo = {
+      ...form,
+      id: Date.now(),
+      precio: Number(form.precio),
+      stock: Number(form.stock),
+      precioOferta: form.precioOferta ? Number(form.precioOferta) : null
+    };
     setProductos((actuales) => crearProducto(actuales, nuevo));
     setForm(initialForm);
+    setMostrarForm(false);
     setMensaje("Producto agregado correctamente.");
   };
-  const actualizarStock = (e) => {
+
+  const ajustarStockDelta = (id, delta) => {
+    const prod = productos.find((p) => p.id === id);
+    if (!prod) return;
+    const nuevo = Math.max(0, (prod.stock || 0) + delta);
+    setProductos((actuales) => actualizarProducto(actuales, id, { stock: nuevo }));
+    setMensaje(`Stock de "${prod.nombre}" actualizado a ${nuevo}.`);
+  };
+
+  const aplicarLoteStock = (e, id) => {
     e.preventDefault();
-    const cantidad = Number(cantidadStock);
-    if (!stockId || !Number.isInteger(cantidad) || cantidad <= 0) {
-      setMensaje("Selecciona un producto e ingresa una cantidad entera mayor que cero.");
+    const cantidad = Number(loteStock);
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      setMensaje("Ingresa una cantidad entera mayor que cero.");
       return;
     }
-    setProductos((actuales) => actualizarProducto(actuales, Number(stockId), {
-      stock: (actuales.find((p) => p.id === Number(stockId))?.stock || 0) + cantidad
-    }));
-    setCantidadStock("");
-    setMensaje("Ingreso de stock registrado.");
+    const prod = productos.find((p) => p.id === id);
+    const nuevo = (prod?.stock || 0) + cantidad;
+    setProductos((actuales) => actualizarProducto(actuales, id, { stock: nuevo }));
+    setEditandoStockId(null);
+    setLoteStock("");
+    setMensaje(`Se sumaron ${cantidad} unidades a "${prod?.nombre}". Nuevo stock: ${nuevo}.`);
   };
+
+  const iniciarEdicionOferta = (prod) => {
+    setEditandoOfertaId(prod.id);
+    setNuevoPrecioOferta(prod.precioOferta ? String(prod.precioOferta) : "");
+  };
+
+  const guardarOferta = (e, id) => {
+    e.preventDefault();
+    const prod = productos.find((p) => p.id === id);
+    if (!prod) return;
+    const oferta = Number(nuevoPrecioOferta);
+    if (!oferta || oferta <= 0) {
+      setMensaje("Ingresa un precio de oferta válido mayor a cero.");
+      return;
+    }
+    if (oferta >= prod.precio) {
+      setMensaje(`El precio de oferta (${money(oferta)}) debe ser menor que el precio normal (${money(prod.precio)}).`);
+      return;
+    }
+    setProductos((actuales) => actualizarProducto(actuales, id, { precioOferta: oferta }));
+    setEditandoOfertaId(null);
+    setNuevoPrecioOferta("");
+    setMensaje(`Oferta de ${money(oferta)} aplicada a "${prod.nombre}". Ahora es visible en la tienda.`);
+  };
+
+  const quitarOferta = (id) => {
+    const prod = productos.find((p) => p.id === id);
+    setProductos((actuales) => actualizarProducto(actuales, id, { precioOferta: null }));
+    setMensaje(`Oferta eliminada de "${prod?.nombre}". Volvió a precio normal.`);
+  };
+
   const cambiarEstado = (id, estado) => {
     const actualizadas = ordenes.map((o) => o.id === id ? { ...o, estado } : o);
     setOrdenes(actualizadas);
@@ -110,8 +173,7 @@ function Admin({ productos, setProductos }) {
     </div>
     <nav className="admin-nav nav nav-pills flex-wrap gap-2 mb-4">
       <Link className={`nav-link ${seccion === "/" ? "active" : ""}`} to="/admin">Dashboard</Link>
-      <Link className={`nav-link ${seccion === "/inventario" ? "active" : ""}`} to="/admin/inventario">Inventario</Link>
-      <Link className={`nav-link ${seccion === "/stock" ? "active" : ""}`} to="/admin/stock">Ingresar stock</Link>
+      <Link className={`nav-link ${seccion === "/inventario" ? "active" : ""}`} to="/admin/inventario">Inventario y Stock</Link>
       <Link className={`nav-link ${seccion === "/pedidos" ? "active" : ""}`} to="/admin/pedidos">Confirmar pedidos</Link>
       <Link className={`nav-link ${seccion === "/cuenta" ? "active" : ""}`} to="/admin/cuenta">Cuenta/ajustes</Link>
     </nav>
@@ -130,23 +192,204 @@ function Admin({ productos, setProductos }) {
           {!ordenes.length && <p className="text-secondary">Aún no hay datos suficientes para identificar temporadas.</p>}
         </section></div>
       </div>
-      <div className="admin-shortcuts mt-4"><Link to="/admin/inventario">＋ Administrar inventario</Link><Link to="/admin/stock">＋ Ingresar stock</Link><Link to="/admin/pedidos">✓ Revisar pedidos</Link></div>
+      <div className="admin-shortcuts mt-4"><Link to="/admin/inventario">＋ Administrar inventario y stock</Link><Link to="/admin/pedidos">✓ Revisar pedidos</Link></div>
     </>}
 
-    {seccion === "/inventario" && <section className="admin-panel"><h2>Inventario de productos</h2><div className="row g-2 my-3"><div className="col-12 col-md-6"><input className="form-control" placeholder="Buscar por nombre o código" value={busqueda} onChange={e => setBusqueda(e.target.value)} aria-label="Buscar producto"/></div></div>
-      <form className="row g-2 border rounded p-3 mb-4" onSubmit={guardar}><h3 className="h5">Agregar producto</h3>
-        <div className="col-12 col-md-3"><label className="form-label">Código</label><input className="form-control" value={form.codigo} onChange={e => setForm({...form,codigo:e.target.value})} required/></div>
-        <div className="col-12 col-md-5"><label className="form-label">Nombre</label><input className="form-control" value={form.nombre} onChange={e => setForm({...form,nombre:e.target.value})} required/></div>
-        <div className="col-6 col-md-2"><label className="form-label">Precio CLP</label><input className="form-control" type="number" min="1" value={form.precio} onChange={e => setForm({...form,precio:e.target.value})} required/></div>
-        <div className="col-6 col-md-2"><label className="form-label">Stock inicial</label><input className="form-control" type="number" min="0" value={form.stock} onChange={e => setForm({...form,stock:e.target.value})} required/></div>
-        <div className="col-12 col-md-4"><label className="form-label">Categoría</label><select className="form-select" value={form.categoria} onChange={e => {const categoria=e.target.value; setForm({...form,categoria,categoriaLabel:categoria[0].toUpperCase()+categoria.slice(1)});}}><option value="tops">Tops</option><option value="bottoms">Bottoms</option><option value="accesorios">Accesorios</option><option value="outerwear">Outerwear</option><option value="ofertas">Ofertas</option></select></div>
-        <div className="col-12 col-md-8"><label className="form-label">Descripción</label><input className="form-control" value={form.descripcion} onChange={e => setForm({...form,descripcion:e.target.value})}/></div>
-        <div className="col-12"><button className="btn btn-dark" type="submit">Guardar producto</button></div>
-      </form>
-      <div className="table-responsive"><table className="table table-hover align-middle"><thead><tr><th>Código</th><th>Producto</th><th>Precio</th><th>Stock</th><th>Acción</th></tr></thead><tbody>{productosFiltrados.map(p => <tr key={p.id}><td>{p.codigo}</td><td>{p.nombre}</td><td>{money(p.precio)}</td><td><span className={`badge ${p.stock <= 3 ? "text-bg-danger" : "text-bg-success"}`}>{p.stock}</span></td><td><button className="btn btn-sm btn-outline-danger" onClick={() => {setProductos(actuales => eliminarProducto(actuales,p.id)); setMensaje("Producto eliminado del catálogo.");}}>Eliminar</button></td></tr>)}</tbody></table></div>
-    </section>}
+    {seccion === "/inventario" && <section className="admin-panel">
+      <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+        <div>
+          <h2 className="mb-1">Inventario y Stock</h2>
+          <p className="text-secondary small mb-0">Gestiona catálogo y ajusta el stock de cada producto directamente desde la tabla.</p>
+        </div>
+        <button
+          type="button"
+          className={`btn ${mostrarForm ? "btn-outline-dark" : "btn-dark"} d-inline-flex align-items-center gap-1`}
+          onClick={() => setMostrarForm(!mostrarForm)}
+        >
+          {mostrarForm ? "✕ Cerrar formulario" : "＋ Agregar nuevo producto"}
+        </button>
+      </div>
 
-    {seccion === "/stock" && <section className="admin-panel"><h2>Ingreso de stock</h2><p className="text-secondary">El ingreso se suma al stock disponible del producto seleccionado.</p><form className="row g-3 align-items-end" onSubmit={actualizarStock}><div className="col-12 col-md-7"><label className="form-label">Producto</label><select className="form-select" value={stockId} onChange={e => setStockId(e.target.value)} required><option value="">Selecciona un producto</option>{productos.map(p => <option key={p.id} value={p.id}>{p.nombre} — stock actual: {p.stock}</option>)}</select></div><div className="col-12 col-md-3"><label className="form-label">Unidades recibidas</label><input className="form-control" type="number" min="1" step="1" value={cantidadStock} onChange={e => setCantidadStock(e.target.value)} required/></div><div className="col-12 col-md-2"><button className="btn btn-dark w-100">Ingresar</button></div></form></section>}
+      <div className="row g-2 mb-3">
+        <div className="col-12 col-md-6">
+          <input className="form-control" placeholder="Buscar por nombre o código" value={busqueda} onChange={e => setBusqueda(e.target.value)} aria-label="Buscar producto"/>
+        </div>
+      </div>
+
+      {mostrarForm && (
+        <form className="row g-2 border rounded p-3 mb-4 bg-light" onSubmit={guardar}>
+          <div className="col-12 d-flex justify-content-between align-items-center">
+            <h3 className="h5 mb-0">Nuevo Producto</h3>
+            <span className="badge text-bg-secondary">Formulario de registro</span>
+          </div>
+          <div className="col-12 col-md-3"><label className="form-label">Código</label><input className="form-control" value={form.codigo} onChange={e => setForm({...form,codigo:e.target.value})} required/></div>
+          <div className="col-12 col-md-5"><label className="form-label">Nombre</label><input className="form-control" value={form.nombre} onChange={e => setForm({...form,nombre:e.target.value})} required/></div>
+          <div className="col-6 col-md-2"><label className="form-label">Precio CLP</label><input className="form-control" type="number" min="1" value={form.precio} onChange={e => setForm({...form,precio:e.target.value})} required/></div>
+          <div className="col-6 col-md-2"><label className="form-label">Precio Oferta (opcional)</label><input className="form-control" type="number" min="1" placeholder="Ej: 14990" value={form.precioOferta || ""} onChange={e => setForm({...form,precioOferta:e.target.value})}/></div>
+          <div className="col-6 col-md-2"><label className="form-label">Stock inicial</label><input className="form-control" type="number" min="0" value={form.stock} onChange={e => setForm({...form,stock:e.target.value})} required/></div>
+          <div className="col-6 col-md-3"><label className="form-label">Categoría</label><select className="form-select" value={form.categoria} onChange={e => {const categoria=e.target.value; setForm({...form,categoria,categoriaLabel:categoria[0].toUpperCase()+categoria.slice(1)});}}><option value="tops">Tops</option><option value="bottoms">Bottoms</option><option value="accesorios">Accesorios</option><option value="outerwear">Outerwear</option><option value="ofertas">Ofertas</option></select></div>
+          <div className="col-12 col-md-7"><label className="form-label">Descripción</label><input className="form-control" value={form.descripcion} onChange={e => setForm({...form,descripcion:e.target.value})}/></div>
+          <div className="col-12 d-flex gap-2 mt-2">
+            <button className="btn btn-dark" type="submit">Guardar producto</button>
+            <button className="btn btn-outline-secondary" type="button" onClick={() => setMostrarForm(false)}>Cancelar</button>
+          </div>
+        </form>
+      )}
+
+      <div className="table-responsive">
+        <table className="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Producto</th>
+              <th style={{ minWidth: "190px" }}>Precio / Oferta</th>
+              <th style={{ minWidth: "220px" }}>Ajuste de Stock</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {productosFiltrados.map(p => (
+              <tr key={p.id}>
+                <td><code>{p.codigo}</code></td>
+                <td>
+                  <strong>{p.nombre}</strong>
+                  <div className="text-secondary small">{p.categoriaLabel}</div>
+                </td>
+                <td>
+                  <div>
+                    <span className={tieneOferta(p) ? "text-decoration-line-through text-secondary small d-block" : "fw-bold"}>
+                      {money(p.precio)}
+                    </span>
+
+                    {tieneOferta(p) && (
+                      <div className="d-flex align-items-center gap-1 mt-1">
+                        <span className="badge text-bg-danger fw-normal" style={{ fontSize: "0.75rem" }}>
+                          {money(p.precioOferta)} (-{calcularDescuento(p)}%)
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-link text-danger p-0 ms-1 text-decoration-none"
+                          style={{ fontSize: "0.75rem" }}
+                          title="Quitar oferta"
+                          onClick={() => quitarOferta(p.id)}
+                        >
+                          ✕ Quitar
+                        </button>
+                      </div>
+                    )}
+
+                    {editandoOfertaId === p.id ? (
+                      <form className="d-flex align-items-center gap-1 mt-1" onSubmit={(e) => guardarOferta(e, p.id)}>
+                        <input
+                          type="number"
+                          className="form-control form-control-sm py-0 px-1"
+                          style={{ width: "85px", height: "26px" }}
+                          placeholder="Oferta $"
+                          min="1"
+                          max={p.precio - 1}
+                          autoFocus
+                          value={nuevoPrecioOferta}
+                          onChange={(e) => setNuevoPrecioOferta(e.target.value)}
+                        />
+                        <button type="submit" className="btn btn-sm btn-dark py-0 px-2" style={{ height: "26px" }} title="Aplicar oferta">✓</button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary py-0 px-1"
+                          style={{ height: "26px" }}
+                          onClick={() => { setEditandoOfertaId(null); setNuevoPrecioOferta(""); }}
+                        >
+                          ✕
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-primary py-0 px-1 mt-1"
+                        style={{ fontSize: "0.72rem", height: "24px" }}
+                        onClick={() => iniciarEdicionOferta(p)}
+                      >
+                        {tieneOferta(p) ? "✎ Modificar oferta" : "＋ Aplicar oferta"}
+                      </button>
+                    )}
+                  </div>
+                </td>
+                <td>
+                  <div className="d-flex align-items-center gap-2 flex-wrap">
+                    <div className="btn-group btn-group-sm" role="group" aria-label="Ajustar stock">
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary px-2"
+                        title="Reducir stock en 1"
+                        disabled={p.stock <= 0}
+                        onClick={() => ajustarStockDelta(p.id, -1)}
+                      >
+                        −
+                      </button>
+                      <span className={`badge ${p.stock <= 3 ? "text-bg-danger" : "text-bg-success"} d-flex align-items-center px-2`} style={{ minWidth: "50px", justifyContent: "center" }}>
+                        {p.stock} un.
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary px-2"
+                        title="Aumentar stock en 1"
+                        onClick={() => ajustarStockDelta(p.id, 1)}
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {editandoStockId === p.id ? (
+                      <form className="d-inline-flex align-items-center gap-1" onSubmit={(e) => aplicarLoteStock(e, p.id)}>
+                        <input
+                          type="number"
+                          className="form-control form-control-sm py-0 px-1"
+                          style={{ width: "65px", height: "28px" }}
+                          placeholder="+cant"
+                          min="1"
+                          autoFocus
+                          value={loteStock}
+                          onChange={(e) => setLoteStock(e.target.value)}
+                        />
+                        <button type="submit" className="btn btn-sm btn-dark py-0 px-2" style={{ height: "28px" }} title="Guardar">✓</button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary py-0 px-1"
+                          style={{ height: "28px" }}
+                          onClick={() => { setEditandoStockId(null); setLoteStock(""); }}
+                        >
+                          ✕
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-dark py-0 px-2"
+                        style={{ fontSize: "0.75rem", height: "28px" }}
+                        title="Ingresar lote de unidades"
+                        onClick={() => { setEditandoStockId(p.id); setLoteStock(""); }}
+                      >
+                        + Lote
+                      </button>
+                    )}
+                  </div>
+                </td>
+                <td>
+                  <button
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={() => {
+                      setProductos(actuales => eliminarProducto(actuales, p.id));
+                      setMensaje("Producto eliminado del catálogo.");
+                    }}
+                  >
+                    Eliminar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>}
 
     {seccion === "/pedidos" && <section className="admin-panel"><h2>Confirmación y preparación de pedidos</h2>{ordenes.length ? <div className="table-responsive"><table className="table align-middle"><thead><tr><th>Pedido</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{ordenes.map(o => <tr key={o.id}><td>{o.id}{o.demo && <><br/><span className="badge text-bg-warning">DEMO</span></>}</td><td>{o.cliente?.nombre}<br/><small>{o.cliente?.correo}</small></td><td>{new Date(o.fecha).toLocaleDateString("es-CL")}</td><td>{money(o.total)}</td><td><span className="badge text-bg-secondary">{o.estado}</span></td><td><div className="d-flex flex-wrap gap-1"><button className="btn btn-sm btn-outline-primary" onClick={() => cambiarEstado(o.id,"CONFIRMADO")}>Aceptar</button><button className="btn btn-sm btn-outline-success" onClick={() => cambiarEstado(o.id,"PREPARADO")}>Preparado</button><button className="btn btn-sm btn-outline-danger" onClick={() => cambiarEstado(o.id,"CANCELADO")}>Cancelar</button></div></td></tr>)}</tbody></table></div> : <p className="text-secondary">No hay pedidos registrados todavía. Realiza una compra de prueba para verla aquí.</p>}</section>}
 
