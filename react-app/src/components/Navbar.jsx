@@ -131,11 +131,11 @@ function Navbar({ cantidadCarrito }) {
         <nav className="mobile-menu-links">
 
           <Link
-            to="/colecciones"
+            to="/productos"
             onClick={cerrarMenu}
           >
             <span>02</span>
-            Colección Y2K
+            Colección
           </Link>
 
           <Link
