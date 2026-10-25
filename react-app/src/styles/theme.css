@@ -1,0 +1,88 @@
+/* =========================================================
+   1. FUENTES PERSONALIZADAS
+   ========================================================= */
+
+@font-face {
+  font-family: "Outmoded Title";
+  src: url("../assets/fonts/Title.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Outmoded Body";
+  src: url("../assets/fonts/Body.otf") format("opentype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Outmoded txt";
+  src: url("../assets/fonts/Subway_Haze_1.1.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Outmoded Bttn";
+  src: url("../assets/fonts/KottaOne-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+
+/* =========================================================
+   2. PALETA DE COLORES Y TIPOGRAFÍAS
+   ========================================================= */
+
+:root {
+  --black: #010300;
+  --neon: #FF3CF7;
+  --lime: #FF8AEF;
+  --olive: #D946EF;
+  --dark-olive: #9223B0;
+  --forest-black: #160B1C;
+  --gray: #b5b5b5;
+  --muted-gray: #8B7D91;
+
+  --font-title: "Outmoded Title", sans-serif;
+  --font-body: "Outmoded Body", sans-serif;
+  --font-txt: "Outmoded txt", sans-serif;
+  --font-bttn: "Outmoded Bttn", sans-serif;
+}
+
+
+/* =========================================================
+   3. RESET GENERAL
+   ========================================================= */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+body {
+  width: 100%;
+  min-height: 100vh;
+
+  overflow-x: hidden;
+
+  color: var(--gray);
+  background-color: var(--black);
+
+  font-family: var(--font-body);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
