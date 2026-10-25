@@ -3,7 +3,8 @@ import DetalleProducto from "./pages/DetalleProducto";
 import {
   BrowserRouter,
   Routes,
-  Route
+  Route,
+  Navigate
 } from "react-router-dom";
 
 import Colecciones from "./pages/Colecciones";
@@ -167,6 +168,16 @@ function App() {
         <Route
           path="/colecciones"
           element={<Colecciones />}
+        />
+
+        <Route
+          path="/categorias"
+          element={<Colecciones />}
+        />
+
+        <Route
+          path="/ofertas"
+          element={<Navigate to="/productos?categoria=ofertas" replace />}
         />
 
         <Route
