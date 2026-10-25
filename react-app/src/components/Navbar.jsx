@@ -44,8 +44,12 @@ function Navbar({ cantidadCarrito }) {
 
       <nav className="navbar-menu">
 
-        <Link to="/colecciones">
+        <Link to="/productos">
           Colección
+        </Link>
+
+        <Link to="/productos?categoria=ofertas">
+          Ofertas
         </Link>
 
         <Link to="/SobreNosotros">
@@ -135,10 +139,18 @@ function Navbar({ cantidadCarrito }) {
           </Link>
 
           <Link
-            to="/SobreNosotros"
+            to="/productos?categoria=ofertas"
             onClick={cerrarMenu}
           >
             <span>03</span>
+            Ofertas
+          </Link>
+
+          <Link
+            to="/SobreNosotros"
+            onClick={cerrarMenu}
+          >
+            <span>04</span>
             Sobre Nosotros
           </Link>
 
